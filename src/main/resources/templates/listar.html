@@ -19,6 +19,7 @@
       <th>precio</th>
       <th>fecha</th>
       <th>editar</th>
+      <th>eliminar</th>
     </tr>
     </thead>
     <tbody>
@@ -28,6 +29,7 @@
       <td th:text="${producto.precio}"></td>
       <td th:text="${producto.createAt}"></td>
       <th><a th:href="@{/form/} + ${producto.id}">editar</a></th>
+      <th><a th:href="@{/eliminar/} + ${producto.id}" onclick="return confirm('Estas seguro que deseas eliminar el producto?');">eliminar</a></th>
     </tr>
     </tbody>
   </table>

@@ -2,11 +2,13 @@ package com.miguelbtcode.springboot.webflux.app.controllers;
 
 import com.miguelbtcode.springboot.webflux.app.models.documents.Producto;
 import com.miguelbtcode.springboot.webflux.app.models.services.ProductoService;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.support.SessionStatus;
 import org.thymeleaf.spring6.context.webflux.ReactiveDataDriverContextVariable;
@@ -14,6 +16,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.Date;
 
 
 @SessionAttributes("producto")
@@ -73,17 +76,50 @@ public class ProductoController {
                 .defaultIfEmpty(new Producto());
 
         model.addAttribute("titulo", "Editar producto");
+        model.addAttribute("boton", "Editar");
         model.addAttribute("producto", productoMono);
 
         return Mono.just("form");
     }
 
     @PostMapping("/form")
-    public Mono<String> guardar(Producto producto, SessionStatus status){
-        status.setComplete();
-        return service.save(producto).doOnNext(p -> {
-            log.info("Producto guardado: " + p.getNombre() + " Id: " + p.getId());
-        }).thenReturn("redirect:/listar");
+    public Mono<String> guardar(@Valid Producto producto, BindingResult result, Model model, SessionStatus status){
+
+        if(result.hasErrors()){
+
+            model.addAttribute("titulo", "Errores en formulario producto");
+            model.addAttribute("boton", "Guardar");
+            return Mono.just("form");
+        }else {
+            status.setComplete();
+
+            if (producto.getCreateAt() == null){
+                producto.setCreateAt(new Date());
+            }
+
+            return service.save(producto).doOnNext(p -> {
+                log.info("Producto guardado: " + p.getNombre() + " Id: " + p.getId());
+            }).thenReturn("redirect:/listar?success=producto+guardado+con+exito");
+        }
+    }
+
+    @GetMapping("/eliminar/{id}")
+    public Mono<String> eliminar(@PathVariable String id){
+        return service.findById(id)
+                .defaultIfEmpty(new Producto())
+                .flatMap(p -> {
+                    if (p.getId() == null){
+                        return Mono.error(new InterruptedException("No existe el producto a eliminar"));
+                    }
+                    return Mono.just(p);
+                })
+                .flatMap(p -> {
+                    log.info("Eliminando producto: " + p.getNombre());
+                    log.info("Eliminando producto id: " + p.getId());
+                    return service.delete(p);
+        })
+                .then(Mono.just("redirect:/listar?success=producto+eliminado+con+exito"))
+                .onErrorResume(ex -> Mono.just("redirect:/listar?error=no+existe+el+producto+a+eliminar"));
     }
 
     @GetMapping("/listar-datadriver")
