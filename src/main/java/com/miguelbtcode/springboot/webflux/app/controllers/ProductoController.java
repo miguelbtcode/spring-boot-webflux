@@ -1,11 +1,18 @@
 package com.miguelbtcode.springboot.webflux.app.controllers;
 
+import com.miguelbtcode.springboot.webflux.app.models.documents.Categoria;
 import com.miguelbtcode.springboot.webflux.app.models.documents.Producto;
 import com.miguelbtcode.springboot.webflux.app.models.services.ProductoService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -15,22 +22,67 @@ import org.thymeleaf.spring6.context.webflux.ReactiveDataDriverContextVariable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.File;
+import java.net.MalformedURLException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Date;
+import java.util.UUID;
 
 
 @SessionAttributes("producto")
 @Controller
 public class ProductoController {
 
-    @Autowired
-    private ProductoService service;
+    private final ProductoService service;
+
+    @Value("${config.uploads.path}")
+    private String path;
+
     private static final Logger log = LoggerFactory.getLogger(ProductoController.class);
+
+    public ProductoController(ProductoService service) {
+        this.service = service;
+    }
+
+    @ModelAttribute("categorias")
+    public Flux<Categoria> categorias(){
+        return service.findAllCategoria();
+    }
+
+    @GetMapping("/uploads/img/{nombreFoto:.+}")
+    public Mono<ResponseEntity<Resource>> verFoto(@PathVariable String nombreFoto) throws MalformedURLException {
+        Path ruta = Paths.get(path).resolve(nombreFoto).toAbsolutePath();
+        Resource imagen = new UrlResource(ruta.toUri());
+
+        return Mono.just(
+                ResponseEntity.ok()
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment;filename=\"" + imagen.getFilename() + "\"")
+                        .body(imagen)
+        );
+    }
+
+    @GetMapping("/ver/{id}")
+    public Mono<String> ver(Model model, @PathVariable String id){
+        return service.findById(id)
+                .doOnNext(p -> {
+                    model.addAttribute("producto", p);
+                    model.addAttribute("titulo", "Detalle producto");
+                }).switchIfEmpty(Mono.just(new Producto()))
+                .flatMap(producto -> {
+                    if (producto.getId() == null){
+                        return Mono.error(new InterruptedException("No existe el producto"));
+                    }
+                    return Mono.just(producto);
+                }).then(Mono.just("ver"))
+                .onErrorResume(ex -> Mono.just("redirect:/listar?error=no+existe+el+producto"));
+    }
+
     @GetMapping({"/listar", "/"})
     public Mono<String> listar(Model model){
         Flux<Producto> productos = service.findAllWithNameToUpperCase();
-
-        productos.subscribe(producto -> log.info(producto.getNombre()));
+        productos.subscribe(producto -> log.info(producto.getNombre() + " " + producto.getCategoria().getId()));
 
         model.addAttribute("productos", productos);
         model.addAttribute("titulo", "Listado de productos");
@@ -83,7 +135,7 @@ public class ProductoController {
     }
 
     @PostMapping("/form")
-    public Mono<String> guardar(@Valid Producto producto, BindingResult result, Model model, SessionStatus status){
+    public Mono<String> guardar(@Valid Producto producto, BindingResult result, Model model, @RequestPart FilePart file, SessionStatus status){
 
         if(result.hasErrors()){
 
@@ -93,12 +145,32 @@ public class ProductoController {
         }else {
             status.setComplete();
 
-            if (producto.getCreateAt() == null){
-                producto.setCreateAt(new Date());
-            }
+            Mono<Categoria> categoriaMono = service.findCategoriaById(producto.getCategoria().getId());
 
-            return service.save(producto).doOnNext(p -> {
-                log.info("Producto guardado: " + p.getNombre() + " Id: " + p.getId());
+            return categoriaMono.flatMap(categoria -> {
+
+                if (producto.getCreateAt() == null){
+                    producto.setCreateAt(new Date());
+                }
+
+                if (!file.filename().isEmpty()){
+                    producto.setFoto(UUID.randomUUID().toString() + "-" + file.filename()
+                            .replace(" ", "")
+                            .replace(":", "")
+                            .replace("\\", "")
+                    );
+                }
+
+                producto.setCategoria(categoria);
+                return service.save(producto);
+            }).doOnNext(p -> {
+                log.info("Categoria asignada: " + p.getCategoria().getNombre() + " Id cat: " + p.getCategoria().getId());
+                log.info("Producto guardado: " + p.getNombre() + " Id prod: " + p.getId());
+            }).flatMap(p -> {
+                if(!file.filename().isEmpty()){
+                    return file.transferTo(new File(path + p.getFoto()));
+                }
+                return Mono.empty();
             }).thenReturn("redirect:/listar?success=producto+guardado+con+exito");
         }
     }

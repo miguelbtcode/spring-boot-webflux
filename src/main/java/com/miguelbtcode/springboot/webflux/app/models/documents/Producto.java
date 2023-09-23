@@ -1,5 +1,6 @@
 package com.miguelbtcode.springboot.webflux.app.models.documents;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.data.annotation.Id;
@@ -19,8 +20,9 @@ public class Producto {
     private Double precio;
     @DateTimeFormat(pattern = "yyyy-MM-dd")
     private Date createAt;
-
+    @Valid
     private Categoria categoria;
+    private String foto;
 
     public Producto() {
     }
@@ -73,5 +75,13 @@ public class Producto {
 
     public void setCategoria(Categoria categoria) {
         this.categoria = categoria;
+    }
+
+    public String getFoto() {
+        return foto;
+    }
+
+    public void setFoto(String foto) {
+        this.foto = foto;
     }
 }

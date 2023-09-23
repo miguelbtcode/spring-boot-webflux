@@ -8,7 +8,7 @@
     <h1 th:text="${titulo}"></h1>
     <a th:href="@{/listar}">Listar</a>
     <div>
-        <form th:action="@{/form}" method="post" th:object="${producto}">
+        <form th:action="@{/form}" method="post" th:object="${producto}" enctype="multipart/form-data">
             <!--<input th:if="${producto.id != null}" type="hidden" th:field="*{id}">-->
             <div>
                 <label for="nombre">Nombre</label>
@@ -23,6 +23,23 @@
             <div>
                 <label for="createAt">Fecha</label>
                 <div><input type="date" th:field="*{createAt}" /></div>
+            </div>
+            <div>
+                <label for="categoria.id">Categoria</label>
+                <div>
+                    <select th:field="*{categoria.id}">
+                        <option value="">-- seleccionar --</option>
+                        <option th:each="categoria: ${categorias}" th:value="${categoria.id}" th:text="${categoria.nombre}"></option>
+                    </select>
+                </div>
+                    <small th:if="${#fields.hasErrors('categoria.id')}"
+                           th:errors="*{categoria.id}"></small>
+            </div>
+            <div>
+                <label for="file">Foto</label>
+                <div>
+                    <input type="file" name="file" />
+                </div>
             </div>
             <div>
                 <div><input type="submit" th:value="${boton}" /></div>
